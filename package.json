@@ -8,6 +8,8 @@
   },
   "scripts": {
     "build": "rm -rf build && tsc && npm run convert-data && chmod 755 build/index.js",
+    "start": "node build/api-server.js",
+    "start:mcp": "node build/index.js",
     "inspector": "tsc && npm run convert-data && npx @modelcontextprotocol/inspector npx tsx src/index.ts",
     "convert-data": "tsx scripts/decompress-dataset.ts && tsx scripts/tsv-to-sqlite.ts && rm -rf data_local_temp"
   },
@@ -22,12 +24,16 @@
     "@modelcontextprotocol/sdk": "^1.12.1",
     "@types/yauzl": "^2.10.3",
     "better-sqlite3": "^11.7.0",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
     "papaparse": "^5.4.1",
     "yauzl": "^3.2.0",
     "zod": "^3.25.46"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.5",
     "@types/node": "^22.15.29",
     "@types/papaparse": "^5.3.16",
     "tsx": "^4.19.2",

@@ -1,0 +1,281 @@
+openapi: 3.1.0
+info:
+  title: Svensk Receptkalkylator API
+  description: |
+    API för att beräkna näringsvärden för svenska recept.
+    Stöder svenska måttenheter som dl, msk, tsk, krm, etc.
+  version: 1.0.0
+servers:
+  - url: https://YOUR-APP-URL.railway.app
+    description: Production server (update with your Railway URL)
+
+paths:
+  /api/foods/search:
+    get:
+      operationId: searchFoods
+      summary: Sök efter livsmedel
+      description: Sök efter livsmedel i databasen med namn eller del av namn
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: Sökterm (t.ex. "mjölk", "kycklingbröst")
+          schema:
+            type: string
+        - name: page
+          in: query
+          required: false
+          description: Sidnummer för paginering
+          schema:
+            type: integer
+            default: 1
+        - name: pageSize
+          in: query
+          required: false
+          description: Antal resultat per sida
+          schema:
+            type: integer
+            default: 5
+      responses:
+        '200':
+          description: Sökresultat
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  query:
+                    type: string
+                  page:
+                    type: integer
+                  pageSize:
+                    type: integer
+                  count:
+                    type: integer
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FoodItem'
+
+  /api/foods/{id}:
+    get:
+      operationId: getFoodById
+      summary: Hämta livsmedel med ID
+      description: Hämta detaljerad information om ett specifikt livsmedel
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Livsmedels-ID (börjar med "fd_")
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Livsmedelsdetaljer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FoodItem'
+        '404':
+          description: Livsmedel hittades inte
+
+  /api/parse-ingredient:
+    post:
+      operationId: parseIngredient
+      summary: Tolka svensk ingredienstext
+      description: |
+        Tolkar svensk ingredienstext och extraherar mängd, enhet och ingrediensnamn.
+        Stöder format som "2 dl mjölk", "200g kyckling", "1 msk olja".
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - text
+              properties:
+                text:
+                  type: string
+                  description: Ingredienstext att tolka
+                  example: "2 dl mjölk"
+      responses:
+        '200':
+          description: Tolkad ingrediens
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParsedIngredient'
+
+  /api/recipe-from-text:
+    post:
+      operationId: calculateRecipeFromText
+      summary: Beräkna näringsvärden från recepttext
+      description: |
+        Huvudverktyget för att beräkna näringsvärden. Tar emot en lista med
+        ingredienser i svensk textformat och returnerar fullständig näringsanalys.
+
+        Svenska måttenheter som stöds:
+        - Vikt: g, kg, hg
+        - Volym: dl, l, cl, ml, msk (matsked), tsk (tesked), krm (kryddmått)
+        - Antal: st (styck)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - ingredientTexts
+              properties:
+                ingredientTexts:
+                  type: array
+                  items:
+                    type: string
+                  description: Lista med ingredienser i svensk text
+                  example: ["3 dl vetemjöl", "5 dl mjölk", "2 st ägg", "1 msk smör"]
+                servings:
+                  type: integer
+                  description: Antal portioner
+                  default: 1
+                  example: 4
+                recipeName:
+                  type: string
+                  description: Namn på receptet
+                  example: "Pannkakor"
+      responses:
+        '200':
+          description: Näringsberäkning för receptet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecipeResult'
+
+  /api/calculate-recipe:
+    post:
+      operationId: calculateRecipeFromIds
+      summary: Beräkna näringsvärden med livsmedels-ID
+      description: |
+        Alternativt verktyg för att beräkna näringsvärden när du redan har
+        livsmedels-ID:n från en tidigare sökning.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - ingredients
+              properties:
+                ingredients:
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - foodId
+                      - quantity
+                      - unit
+                    properties:
+                      foodId:
+                        type: string
+                        description: Livsmedels-ID
+                        example: "fd_12345"
+                      quantity:
+                        type: number
+                        description: Mängd
+                        example: 2
+                      unit:
+                        type: string
+                        description: Enhet (g, dl, msk, etc.)
+                        example: "dl"
+                servings:
+                  type: integer
+                  default: 1
+                recipeName:
+                  type: string
+      responses:
+        '200':
+          description: Näringsberäkning
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecipeResult'
+
+components:
+  schemas:
+    FoodItem:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unikt ID för livsmedlet
+        name:
+          type: string
+          description: Namn på livsmedlet
+        type:
+          type: string
+          enum: [everyday, grocery, prepared, restaurant]
+        nutrition_100g:
+          type: object
+          additionalProperties:
+            type: number
+          description: Näringsvärden per 100g
+        ean_13:
+          type: string
+          description: Streckkod (om tillgänglig)
+
+    ParsedIngredient:
+      type: object
+      properties:
+        originalText:
+          type: string
+        quantity:
+          type: number
+        unit:
+          type: string
+        ingredientName:
+          type: string
+        gramsEquivalent:
+          type: number
+          nullable: true
+
+    RecipeResult:
+      type: object
+      properties:
+        recipeName:
+          type: string
+        servings:
+          type: integer
+        ingredients:
+          type: array
+          items:
+            type: object
+            properties:
+              originalText:
+                type: string
+              foodName:
+                type: string
+              gramsUsed:
+                type: number
+                nullable: true
+              nutrition:
+                type: object
+                additionalProperties:
+                  type: number
+              error:
+                type: string
+        totalNutrition:
+          type: object
+          additionalProperties:
+            type: number
+          description: Total näring för hela receptet
+        perServingNutrition:
+          type: object
+          additionalProperties:
+            type: number
+          description: Näring per portion
+        nutrientNamesSv:
+          type: object
+          additionalProperties:
+            type: string
+          description: Svenska namn för näringsämnen
