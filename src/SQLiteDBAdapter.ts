@@ -86,6 +86,26 @@ export class SQLiteDBAdapter {
     return row ? this.deserializeRow(row) : null;
   }
 
+  /**
+   * Get multiple foods by their IDs in a single query
+   */
+  async getByIds(ids: string[]): Promise<Map<string, FoodItem>> {
+    if (ids.length === 0) return new Map();
+
+    const selectClause = this.getFoodItemSelectClause();
+    const placeholders = ids.map(() => '?').join(', ');
+    const rows = this.db.prepare(`SELECT ${selectClause}
+                                  FROM foods
+                                  WHERE id IN (${placeholders})`).all(...ids);
+
+    const result = new Map<string, FoodItem>();
+    for (const row of rows) {
+      const food = this.deserializeRow(row);
+      result.set(food.id, food);
+    }
+    return result;
+  }
+
   private deserializeRow(row: any): FoodItem {
     const jsonColumns = [
       'alternate_names',

@@ -3,6 +3,14 @@ import {StdioServerTransport} from "@modelcontextprotocol/sdk/server/stdio.js";
 import {SQLiteDBAdapter} from "./SQLiteDBAdapter.js";
 import {z} from "zod";
 import {randomUUID} from "node:crypto";
+import {
+  parseSwedishIngredient,
+  convertToGrams,
+  calculateNutritionForWeight,
+  sumNutrition,
+  divideNutrition,
+  NUTRIENT_NAMES_SV,
+} from "./SwedishUnits.js";
 
 const SearchFoodByNameRequestSchema = z.object({
   query: z.string().min(1, 'Search query must not be empty'),
@@ -21,6 +29,27 @@ const GetFoodByIdRequestSchema = z.object({
 
 const GetFoodByEan13RequestSchema = z.object({
   ean_13: z.string().length(13, "EAN-13 must be exactly 13 characters long")
+});
+
+// Schema for recipe ingredient with food ID
+const RecipeIngredientSchema = z.object({
+  foodId: z.string().startsWith("fd_", "Food ID must start with 'fd_'"),
+  quantity: z.number().positive("Quantity must be positive"),
+  unit: z.string().min(1, "Unit is required (e.g., 'g', 'dl', 'msk', 'st')"),
+});
+
+// Schema for calculating recipe nutrition
+const CalculateRecipeNutritionSchema = z.object({
+  ingredients: z.array(RecipeIngredientSchema).min(1, "At least one ingredient is required"),
+  servings: z.number().positive().optional().default(1),
+  recipeName: z.string().optional(),
+});
+
+// Schema for parsing and calculating from Swedish text
+const ParseSwedishRecipeSchema = z.object({
+  ingredientTexts: z.array(z.string().min(1)).min(1, "At least one ingredient text is required"),
+  servings: z.number().positive().optional().default(1),
+  recipeName: z.string().optional(),
 });
 
 class MCPServer {
@@ -193,6 +222,180 @@ If the query involves food identification by barcode, ALWAYS use this tool. Neve
         },
       };
     });
+
+    // Swedish recipe nutrition calculation tool
+    this.server.tool(
+      "calculate-recipe-nutrition",
+      `MANDATORY: Använd detta verktyg för att beräkna näringsvärden för recept.
+Use this tool to calculate total nutrition for a recipe with multiple ingredients.
+
+Användningsområden / Use cases:
+- Beräkna totalt näringsinnehåll för ett helt recept
+- Beräkna näringsvärden per portion
+- Analysera recept för kostplanering
+
+Steg för att använda / Steps to use:
+1. Först: Använd 'search-food-by-name' för att hitta food IDs för varje ingrediens
+2. Sedan: Använd detta verktyg med ingredienslistan
+
+Svenska måttenheter som stöds / Supported Swedish units:
+- Vikt / Weight: g, kg, hg
+- Volym / Volume: ml, cl, dl, l, msk (matsked), tsk (tesked), krm (kryddmått)
+- Antal / Count: st (styck)
+
+Example:
+{
+  "ingredients": [
+    {"foodId": "fd_123", "quantity": 2, "unit": "dl"},
+    {"foodId": "fd_456", "quantity": 200, "unit": "g"},
+    {"foodId": "fd_789", "quantity": 1, "unit": "msk"}
+  ],
+  "servings": 4,
+  "recipeName": "Pannkakor"
+}`,
+      CalculateRecipeNutritionSchema.shape,
+      {
+        title: "Calculate recipe nutrition / Beräkna receptnäring",
+        readOnlyHint: true,
+      },
+      async (args, extra) => {
+        const foodIds = args.ingredients.map(i => i.foodId);
+        const foods = await this.db.getByIds(foodIds);
+
+        const ingredientResults: Array<{
+          foodId: string;
+          foodName: string;
+          quantity: number;
+          unit: string;
+          gramsUsed: number | null;
+          nutrition: Record<string, number> | null;
+          error?: string;
+        }> = [];
+
+        const allNutrition: Record<string, number>[] = [];
+
+        for (const ingredient of args.ingredients) {
+          const food = foods.get(ingredient.foodId);
+
+          if (!food) {
+            ingredientResults.push({
+              foodId: ingredient.foodId,
+              foodName: 'Unknown',
+              quantity: ingredient.quantity,
+              unit: ingredient.unit,
+              gramsUsed: null,
+              nutrition: null,
+              error: `Food not found: ${ingredient.foodId}`,
+            });
+            continue;
+          }
+
+          const gramsUsed = convertToGrams(ingredient.quantity, ingredient.unit, food.name);
+
+          if (gramsUsed === null) {
+            ingredientResults.push({
+              foodId: ingredient.foodId,
+              foodName: food.name,
+              quantity: ingredient.quantity,
+              unit: ingredient.unit,
+              gramsUsed: null,
+              nutrition: null,
+              error: `Cannot convert ${ingredient.quantity} ${ingredient.unit} to grams. Use 'st' for pieces or provide weight in grams.`,
+            });
+            continue;
+          }
+
+          if (!food.nutrition_100g) {
+            ingredientResults.push({
+              foodId: ingredient.foodId,
+              foodName: food.name,
+              quantity: ingredient.quantity,
+              unit: ingredient.unit,
+              gramsUsed,
+              nutrition: null,
+              error: 'No nutrition data available for this food',
+            });
+            continue;
+          }
+
+          const ingredientNutrition = calculateNutritionForWeight(food.nutrition_100g, gramsUsed);
+          allNutrition.push(ingredientNutrition);
+
+          ingredientResults.push({
+            foodId: ingredient.foodId,
+            foodName: food.name,
+            quantity: ingredient.quantity,
+            unit: ingredient.unit,
+            gramsUsed: Math.round(gramsUsed * 10) / 10,
+            nutrition: ingredientNutrition,
+          });
+        }
+
+        const totalNutrition = sumNutrition(allNutrition);
+        const perServingNutrition = divideNutrition(totalNutrition, args.servings);
+
+        const result = {
+          recipeName: args.recipeName || 'Untitled Recipe',
+          servings: args.servings,
+          ingredients: ingredientResults,
+          totalNutrition,
+          perServingNutrition,
+          nutrientNamesSv: NUTRIENT_NAMES_SV,
+        };
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(result, null, 2)
+            }
+          ],
+          structuredContent: result,
+        };
+      }
+    );
+
+    // Tool to parse Swedish ingredient text
+    this.server.tool(
+      "parse-swedish-ingredient",
+      `Använd detta verktyg för att tolka svenska ingredienstexter.
+Use this tool to parse Swedish ingredient text into structured data.
+
+This is a helper tool that parses Swedish ingredient formats and extracts:
+- Quantity (mängd)
+- Unit (enhet)
+- Ingredient name (ingrediensnamn)
+
+Supported formats / Format som stöds:
+- "2 dl mjölk" → {quantity: 2, unit: "dl", ingredientName: "mjölk"}
+- "200g kycklingbröst" → {quantity: 200, unit: "g", ingredientName: "kycklingbröst"}
+- "1 msk olivolja" → {quantity: 1, unit: "msk", ingredientName: "olivolja"}
+- "3 st ägg" → {quantity: 3, unit: "st", ingredientName: "ägg"}
+- "1/2 tsk salt" → {quantity: 0.5, unit: "tsk", ingredientName: "salt"}
+- "1 1/2 dl grädde" → {quantity: 1.5, unit: "dl", ingredientName: "grädde"}
+
+After parsing, use 'search-food-by-name' to find the food ID, then use 'calculate-recipe-nutrition'.`,
+      {
+        text: z.string().min(1, "Ingredient text is required"),
+      },
+      {
+        title: "Parse Swedish ingredient / Tolka svensk ingrediens",
+        readOnlyHint: true,
+      },
+      async (args, extra) => {
+        const parsed = parseSwedishIngredient(args.text);
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(parsed, null, 2)
+            }
+          ],
+          structuredContent: parsed,
+        };
+      }
+    );
   }
 
   async connect(): Promise<void> {
