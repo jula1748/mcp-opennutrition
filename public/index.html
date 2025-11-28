@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Receptkalkylator - Beräkna näringsvärden</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    header {
+      text-align: center;
+      color: white;
+      margin-bottom: 30px;
+    }
+
+    header h1 {
+      font-size: 2.5rem;
+      margin-bottom: 10px;
+    }
+
+    header p {
+      opacity: 0.9;
+      font-size: 1.1rem;
+    }
+
+    .card {
+      background: white;
+      border-radius: 16px;
+      padding: 30px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+      margin-bottom: 20px;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #333;
+    }
+
+    .help-text {
+      font-size: 0.85rem;
+      color: #666;
+      margin-bottom: 8px;
+    }
+
+    textarea {
+      width: 100%;
+      padding: 15px;
+      border: 2px solid #e0e0e0;
+      border-radius: 10px;
+      font-size: 1rem;
+      font-family: inherit;
+      resize: vertical;
+      min-height: 150px;
+      transition: border-color 0.2s;
+    }
+
+    textarea:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+
+    .row {
+      display: flex;
+      gap: 20px;
+    }
+
+    .row .form-group {
+      flex: 1;
+    }
+
+    input[type="text"],
+    input[type="number"] {
+      width: 100%;
+      padding: 12px 15px;
+      border: 2px solid #e0e0e0;
+      border-radius: 10px;
+      font-size: 1rem;
+      transition: border-color 0.2s;
+    }
+
+    input:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+
+    button {
+      width: 100%;
+      padding: 15px 30px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      font-size: 1.1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+    }
+
+    button:active {
+      transform: translateY(0);
+    }
+
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .results {
+      display: none;
+    }
+
+    .results.show {
+      display: block;
+    }
+
+    .results h2 {
+      color: #333;
+      margin-bottom: 20px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid #f0f0f0;
+    }
+
+    .summary-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 15px;
+      margin-bottom: 25px;
+    }
+
+    .summary-card {
+      background: linear-gradient(135deg, #f5f7fa 0%, #e4e8eb 100%);
+      padding: 20px;
+      border-radius: 12px;
+      text-align: center;
+    }
+
+    .summary-card.highlight {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+
+    .summary-card .value {
+      font-size: 1.8rem;
+      font-weight: 700;
+    }
+
+    .summary-card .label {
+      font-size: 0.85rem;
+      opacity: 0.8;
+      margin-top: 5px;
+    }
+
+    .nutrition-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+
+    .nutrition-table th,
+    .nutrition-table td {
+      padding: 12px 15px;
+      text-align: left;
+      border-bottom: 1px solid #f0f0f0;
+    }
+
+    .nutrition-table th {
+      background: #f8f9fa;
+      font-weight: 600;
+      color: #333;
+    }
+
+    .nutrition-table tr:hover {
+      background: #f8f9fa;
+    }
+
+    .nutrition-table .nutrient-name {
+      font-weight: 500;
+    }
+
+    .nutrition-table .value {
+      text-align: right;
+      font-family: 'SF Mono', Monaco, monospace;
+    }
+
+    .ingredients-list {
+      margin-top: 25px;
+    }
+
+    .ingredients-list h3 {
+      color: #333;
+      margin-bottom: 15px;
+    }
+
+    .ingredient-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 15px;
+      background: #f8f9fa;
+      border-radius: 8px;
+      margin-bottom: 10px;
+    }
+
+    .ingredient-item.error {
+      background: #fff5f5;
+      border-left: 3px solid #e53e3e;
+    }
+
+    .ingredient-name {
+      font-weight: 500;
+    }
+
+    .ingredient-amount {
+      color: #666;
+      font-size: 0.9rem;
+    }
+
+    .error-message {
+      color: #e53e3e;
+      font-size: 0.85rem;
+    }
+
+    .loading {
+      display: none;
+      text-align: center;
+      padding: 40px;
+    }
+
+    .loading.show {
+      display: block;
+    }
+
+    .spinner {
+      width: 50px;
+      height: 50px;
+      border: 4px solid #f0f0f0;
+      border-top-color: #667eea;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 15px;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .examples {
+      margin-top: 15px;
+      padding: 15px;
+      background: #f8f9fa;
+      border-radius: 10px;
+    }
+
+    .examples h4 {
+      font-size: 0.9rem;
+      color: #666;
+      margin-bottom: 10px;
+    }
+
+    .example-btn {
+      display: inline-block;
+      padding: 8px 15px;
+      background: white;
+      border: 1px solid #e0e0e0;
+      border-radius: 20px;
+      font-size: 0.85rem;
+      cursor: pointer;
+      margin: 3px;
+      transition: all 0.2s;
+    }
+
+    .example-btn:hover {
+      border-color: #667eea;
+      color: #667eea;
+    }
+
+    footer {
+      text-align: center;
+      color: white;
+      opacity: 0.8;
+      margin-top: 30px;
+      font-size: 0.9rem;
+    }
+
+    @media (max-width: 600px) {
+      .row {
+        flex-direction: column;
+        gap: 0;
+      }
+
+      header h1 {
+        font-size: 1.8rem;
+      }
+
+      .summary-cards {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Receptkalkylator</h1>
+      <p>Beräkna näringsvärden för dina recept</p>
+    </header>
+
+    <div class="card">
+      <form id="recipeForm">
+        <div class="form-group">
+          <label for="recipeName">Receptnamn (valfritt)</label>
+          <input type="text" id="recipeName" placeholder="T.ex. Mormors pannkakor">
+        </div>
+
+        <div class="form-group">
+          <label for="ingredients">Ingredienser</label>
+          <p class="help-text">Skriv en ingrediens per rad med mängd och enhet</p>
+          <textarea id="ingredients" placeholder="3 dl vetemjöl
+5 dl mjölk
+2 st ägg
+1 msk smör
+1/2 tsk salt"></textarea>
+        </div>
+
+        <div class="examples">
+          <h4>Prova ett exempel:</h4>
+          <span class="example-btn" data-recipe="pannkakor">Pannkakor</span>
+          <span class="example-btn" data-recipe="smoothie">Smoothie</span>
+          <span class="example-btn" data-recipe="pasta">Pasta med köttfärssås</span>
+        </div>
+
+        <div class="row">
+          <div class="form-group">
+            <label for="servings">Antal portioner</label>
+            <input type="number" id="servings" value="4" min="1">
+          </div>
+        </div>
+
+        <button type="submit">Beräkna näringsvärden</button>
+      </form>
+    </div>
+
+    <div class="loading" id="loading">
+      <div class="spinner"></div>
+      <p>Beräknar näringsvärden...</p>
+    </div>
+
+    <div class="card results" id="results">
+      <h2 id="resultTitle">Resultat</h2>
+
+      <div class="summary-cards" id="summaryCards">
+        <!-- Filled by JavaScript -->
+      </div>
+
+      <h3>Näringsvärden per portion</h3>
+      <table class="nutrition-table">
+        <thead>
+          <tr>
+            <th>Näringsämne</th>
+            <th class="value">Mängd</th>
+          </tr>
+        </thead>
+        <tbody id="nutritionBody">
+          <!-- Filled by JavaScript -->
+        </tbody>
+      </table>
+
+      <div class="ingredients-list">
+        <h3>Ingredienser</h3>
+        <div id="ingredientsList">
+          <!-- Filled by JavaScript -->
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      <p>Data från OpenNutrition - 300 000+ livsmedel</p>
+    </footer>
+  </div>
+
+  <script>
+    const exampleRecipes = {
+      pannkakor: {
+        name: 'Pannkakor',
+        ingredients: `3 dl vetemjöl
+5 dl mjölk
+2 st ägg
+1 msk smör
+1/2 tsk salt`,
+        servings: 4
+      },
+      smoothie: {
+        name: 'Bärsmoothie',
+        ingredients: `2 dl frysta blåbär
+1 st banan
+2 dl yoghurt
+1 dl havremjölk
+1 msk honung`,
+        servings: 2
+      },
+      pasta: {
+        name: 'Pasta med köttfärssås',
+        ingredients: `400 g pasta
+500 g nötfärs
+1 st gul lök
+2 st vitlöksklyftor
+400 g krossade tomater
+2 msk olivolja
+1 tsk salt`,
+        servings: 4
+      }
+    };
+
+    // Example recipe buttons
+    document.querySelectorAll('.example-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const recipe = exampleRecipes[btn.dataset.recipe];
+        if (recipe) {
+          document.getElementById('recipeName').value = recipe.name;
+          document.getElementById('ingredients').value = recipe.ingredients;
+          document.getElementById('servings').value = recipe.servings;
+        }
+      });
+    });
+
+    // Nutrient display names in Swedish
+    const nutrientNames = {
+      'energy_kcal': 'Energi',
+      'energy': 'Energi',
+      'calories': 'Kalorier',
+      'protein': 'Protein',
+      'fat': 'Fett',
+      'saturated_fat': 'Mättat fett',
+      'carbohydrates': 'Kolhydrater',
+      'carbs': 'Kolhydrater',
+      'sugars': 'Sockerarter',
+      'sugar': 'Socker',
+      'fiber': 'Fiber',
+      'salt': 'Salt',
+      'sodium': 'Natrium'
+    };
+
+    const nutrientUnits = {
+      'energy_kcal': 'kcal',
+      'energy': 'kcal',
+      'calories': 'kcal',
+      'protein': 'g',
+      'fat': 'g',
+      'saturated_fat': 'g',
+      'carbohydrates': 'g',
+      'carbs': 'g',
+      'sugars': 'g',
+      'sugar': 'g',
+      'fiber': 'g',
+      'salt': 'g',
+      'sodium': 'mg'
+    };
+
+    // Priority order for displaying nutrients
+    const nutrientPriority = [
+      'energy_kcal', 'energy', 'calories',
+      'protein', 'fat', 'saturated_fat',
+      'carbohydrates', 'carbs', 'sugars', 'sugar',
+      'fiber', 'salt', 'sodium'
+    ];
+
+    document.getElementById('recipeForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const recipeName = document.getElementById('recipeName').value;
+      const ingredientsText = document.getElementById('ingredients').value;
+      const servings = parseInt(document.getElementById('servings').value) || 1;
+
+      // Parse ingredients into array
+      const ingredientTexts = ingredientsText
+        .split('\n')
+        .map(line => line.trim())
+        .filter(line => line.length > 0);
+
+      if (ingredientTexts.length === 0) {
+        alert('Skriv minst en ingrediens');
+        return;
+      }
+
+      // Show loading
+      document.getElementById('loading').classList.add('show');
+      document.getElementById('results').classList.remove('show');
+
+      try {
+        const response = await fetch('/api/recipe-from-text', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ingredientTexts,
+            servings,
+            recipeName: recipeName || undefined
+          })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Något gick fel');
+        }
+
+        displayResults(data);
+      } catch (error) {
+        alert('Fel: ' + error.message);
+      } finally {
+        document.getElementById('loading').classList.remove('show');
+      }
+    });
+
+    function displayResults(data) {
+      // Title
+      document.getElementById('resultTitle').textContent = data.recipeName;
+
+      // Summary cards
+      const summaryCards = document.getElementById('summaryCards');
+      const perServing = data.perServingNutrition || {};
+
+      // Find energy value (could be energy_kcal, energy, or calories)
+      const energyKey = Object.keys(perServing).find(k =>
+        k.includes('energy') || k.includes('kcal') || k === 'calories'
+      );
+      const energy = energyKey ? Math.round(perServing[energyKey]) : '-';
+
+      summaryCards.innerHTML = `
+        <div class="summary-card highlight">
+          <div class="value">${energy}</div>
+          <div class="label">kcal/portion</div>
+        </div>
+        <div class="summary-card">
+          <div class="value">${Math.round(perServing.protein || 0)}g</div>
+          <div class="label">Protein</div>
+        </div>
+        <div class="summary-card">
+          <div class="value">${Math.round(perServing.fat || 0)}g</div>
+          <div class="label">Fett</div>
+        </div>
+        <div class="summary-card">
+          <div class="value">${Math.round(perServing.carbohydrates || perServing.carbs || 0)}g</div>
+          <div class="label">Kolhydrater</div>
+        </div>
+        <div class="summary-card">
+          <div class="value">${data.servings}</div>
+          <div class="label">Portioner</div>
+        </div>
+      `;
+
+      // Nutrition table
+      const nutritionBody = document.getElementById('nutritionBody');
+      nutritionBody.innerHTML = '';
+
+      // Sort nutrients by priority
+      const sortedNutrients = Object.entries(perServing).sort((a, b) => {
+        const aIndex = nutrientPriority.indexOf(a[0]);
+        const bIndex = nutrientPriority.indexOf(b[0]);
+        if (aIndex === -1 && bIndex === -1) return a[0].localeCompare(b[0]);
+        if (aIndex === -1) return 1;
+        if (bIndex === -1) return -1;
+        return aIndex - bIndex;
+      });
+
+      for (const [key, value] of sortedNutrients) {
+        const name = nutrientNames[key] || key.replace(/_/g, ' ');
+        const unit = nutrientUnits[key] || 'g';
+        const displayValue = typeof value === 'number' ? value.toFixed(1) : value;
+
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td class="nutrient-name">${name}</td>
+          <td class="value">${displayValue} ${unit}</td>
+        `;
+        nutritionBody.appendChild(row);
+      }
+
+      // Ingredients list
+      const ingredientsList = document.getElementById('ingredientsList');
+      ingredientsList.innerHTML = '';
+
+      for (const ing of data.ingredients) {
+        const div = document.createElement('div');
+        div.className = 'ingredient-item' + (ing.error ? ' error' : '');
+
+        if (ing.error) {
+          div.innerHTML = `
+            <div>
+              <div class="ingredient-name">${ing.originalText}</div>
+              <div class="error-message">${ing.error}</div>
+            </div>
+          `;
+        } else {
+          const foodName = ing.selectedFood?.name || ing.foodName || 'Okänt';
+          div.innerHTML = `
+            <div>
+              <div class="ingredient-name">${ing.originalText}</div>
+              <div class="ingredient-amount">Matchat: ${foodName} (${ing.gramsUsed}g)</div>
+            </div>
+          `;
+        }
+
+        ingredientsList.appendChild(div);
+      }
+
+      // Show results
+      document.getElementById('results').classList.add('show');
+
+      // Scroll to results
+      document.getElementById('results').scrollIntoView({ behavior: 'smooth' });
+    }
+  </script>
+</body>
+</html>

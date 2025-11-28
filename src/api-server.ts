@@ -7,6 +7,8 @@
 
 import express, { Request, Response } from 'express';
 import cors from 'cors';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { SQLiteDBAdapter } from './SQLiteDBAdapter.js';
 import {
   parseSwedishIngredient,
@@ -17,12 +19,18 @@ import {
   NUTRIENT_NAMES_SV,
 } from './SwedishUnits.js';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Serve static files from public directory
+app.use(express.static(path.join(__dirname, '..', 'public')));
 
 // Initialize database
 const db = new SQLiteDBAdapter();
@@ -362,6 +370,16 @@ app.post('/api/recipe-from-text', async (req: Request, res: Response) => {
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`OpenNutrition API server running on port ${PORT}`);
-  console.log(`Health check: http://localhost:${PORT}/health`);
+  console.log('');
+  console.log('  ╔══════════════════════════════════════════════╗');
+  console.log('  ║                                              ║');
+  console.log('  ║   🥗  Receptkalkylator är igång!            ║');
+  console.log('  ║                                              ║');
+  console.log(`  ║   Öppna i webbläsaren:                       ║`);
+  console.log(`  ║   👉  http://localhost:${PORT}                    ║`);
+  console.log('  ║                                              ║');
+  console.log('  ║   Stäng detta fönster för att avsluta.       ║');
+  console.log('  ║                                              ║');
+  console.log('  ╚══════════════════════════════════════════════╝');
+  console.log('');
 });
